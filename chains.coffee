@@ -1,7 +1,7 @@
 ### ABOUT
-             .__   
-_________  __|  |  
-\____ \  \/  /  |  
+             .__
+_________  __|  |
+\____ \  \/  /  |
 |  |_> >    <|  |__
 |   __/__/\_ \____/
 |__|        \/     js
@@ -49,7 +49,7 @@ class TestChain
 
   _bond_rot : (sp, ep) ->
     dp = PXL.Math.Vec3.sub(ep,sp).normalize()
-    y = new PXL.Math.Vec3(0,1,0)   
+    y = new PXL.Math.Vec3(0,1,0)
     xp = PXL.Math.Vec3.cross(y,dp)
     dd = Math.acos(dp.dot(y))
     m = new PXL.Math.Matrix4()
@@ -57,29 +57,29 @@ class TestChain
 
   constructor : (ca_pos)  ->
     bond_geom = new PXL.Geometry.Cylinder(0.13,50,1,3.82)
-    atom_geom = new PXL.Geometry.Sphere(0.5,10) 
-  
+    atom_geom = new PXL.Geometry.Sphere(0.5,10)
+
     pg = new PXL.Colour.RGBA(0.8,0.8,0.8,1.0)
     bond_mat = new PXL.Material.BasicColourMaterial(pg)
     atom_mat = new PXL.Material.BasicColourMaterial(pg)
 
     @top_node = new PXL.Node()
-    
+
     residue_atoms_node = new PXL.Node()
     residue_bonds_node = new PXL.Node()
 
     residue_atoms_node.add(atom_mat)
     residue_bonds_node.add(bond_mat)
- 
+
     @top_node.add residue_atoms_node
     @top_node.add residue_bonds_node
-  
+
     idx = 0
     for a in ca_pos
       atom_node = new PXL.Node(atom_geom)
       residue_atoms_node.add(atom_node)
       atom_node.matrix.translate(a)
-      
+
       if idx != 0
         bond_node = new PXL.Node(bond_geom)
         residue_bonds_node.add(bond_node)
@@ -91,25 +91,25 @@ class TestChain
 
 
 class Residue
-  constructor : (phi, psi, omega, bond_geom, atom_geom, bond_mat, atom_mat, show_bond) -> 
+  constructor : (phi, psi, omega, bond_geom, atom_geom, bond_mat, atom_mat, show_bond) ->
     # Assuming fixed bond lengths and angles with C as the central point
     # Start left handed - initial positions
     @a = new PXL.Math.Vec3(-2.098,1.23,0)
     @b = new PXL.Math.Vec3(-1.33,0,0)
     @c = new PXL.Math.Vec3(0,0,0)
-  
+
     @phi = phi
     @psi = psi
     @omega = omega
-  
+
     @c_alpha  = @a
     @nitrogen = @b
     @carbon   = @c
-    
+
     @residue_node = new PXL.Node()
     residue_atoms_node = new PXL.Node()
     residue_bonds_node = new PXL.Node()
-    
+
     residue_atoms_node.add(atom_mat)
     residue_bonds_node.add(bond_mat)
 
@@ -118,14 +118,14 @@ class Residue
     @atom_node_c = new PXL.Node(atom_geom)
 
     @bond_node_a = new PXL.Node(bond_geom)
- 
+
     residue_atoms_node.add @atom_node_a
     #residue_atoms_node.add @atom_node_b
     #residue_atoms_node.add @atom_node_c
-    
+
     if show_bond
       residue_bonds_node.add @bond_node_a
-    
+
     @set_positions()
     # ignore bonds for now
     @residue_node.add(residue_atoms_node)
@@ -137,13 +137,13 @@ class Residue
     @atom_node_a.matrix.identity()
     @atom_node_b.matrix.identity()
     @atom_node_b.matrix.identity()
-    
+
   set_positions : () ->
-    @clear_positions() 
+    @clear_positions()
     @atom_node_a.matrix.translate(@a)
-    @atom_node_b.matrix.translate(@b) 
-    @atom_node_c.matrix.translate(@c) 
- 
+    @atom_node_b.matrix.translate(@b)
+    @atom_node_c.matrix.translate(@c)
+
   # Implementation of the NeRF algorithm
   # THIS IS THE KEY part of the program
   # Essentially, the first 3 atoms/first residue is placed
@@ -157,18 +157,18 @@ class Residue
     blengths = [1.53, 1.453, 1.325]
     bangles = [PXL.Math.degToRad(115), PXL.Math.degToRad(109), PXL.Math.degToRad(121)]
     torsions = [prev_res.omega, prev_res.psi, @phi]
-    
-    for i in [0..2] 
+
+    for i in [0..2]
       ab = PXL.Math.Vec3.sub(b,a)
       abn = PXL.Math.Vec3.normalize(ab)
       bc = PXL.Math.Vec3.sub(c,b)
       bcn = PXL.Math.Vec3.multScalar(bc,1.0/blengths[i])
       R = blengths[i]
-    
+
       d.x = R * Math.cos(bangles[i])
       d.y = R * Math.cos(torsions[i]) * Math.sin(bangles[i])
       d.z = R * Math.sin(torsions[i]) * Math.sin(bangles[i])
-      
+
       n = PXL.Math.Vec3.cross(ab,bcn).normalize()
       nbc = PXL.Math.Vec3.cross(n,bcn)
 
@@ -177,7 +177,7 @@ class Residue
       d.x = -d.x
       m.multVec(d)
       d.add(c)
-    
+
       # Shift along one
       if i != 2
         a = b
@@ -195,7 +195,7 @@ class Chains
 
   _bond_rot : (sp, ep) ->
     dp = PXL.Math.Vec3.sub(ep,sp).normalize()
-    y = new PXL.Math.Vec3(0,1,0)   
+    y = new PXL.Math.Vec3(0,1,0)
     xp = PXL.Math.Vec3.cross(y,dp)
     dd = Math.acos(dp.dot(y))
     m = new PXL.Math.Matrix4()
@@ -204,8 +204,8 @@ class Chains
   _create_chain : (idx) ->
     @residues = []
     bond_geom = new PXL.Geometry.Cylinder(0.13,50,1,3.82)
-    atom_geom = new PXL.Geometry.Sphere(0.5,10) 
- 
+    atom_geom = new PXL.Geometry.Sphere(0.5,10)
+
     model_node = new PXL.Node()
     num_residues = @data[idx]['residues'].length
 
@@ -222,9 +222,9 @@ class Chains
       phi = PXL.Math.degToRad(phi)
       psi = PXL.Math.degToRad(psi)
       omega = PXL.Math.degToRad(omega)
- 
+
       residue = new Residue(phi, psi, omega, bond_geom, atom_geom, @_get_material_bond(i, num_residues), @_get_material_atom(i, num_residues),show_bond)
-      
+
       if i > 0
         residue.next_pos(prev_res, flip)
 
@@ -242,42 +242,42 @@ class Chains
       prev_res = residue
 
     model_node
- 
+
   _get_material_atom : (i, num_residues) ->
     pink = new PXL.Colour.RGBA(0.8,0.4,0.4,1.0)
     pg = pink.clone()
-    pg.r = pg.r / num_residues * (i+1) 
-    pg.g = pg.g / num_residues * (i+1) 
+    pg.r = pg.r / num_residues * (i+1)
+    pg.g = pg.g / num_residues * (i+1)
     pg.b = pg.b / num_residues * (i+1)
     calpha_material = new PXL.Material.BasicColourMaterial(pg)
 
   _get_material_bond : (i, num_residues) ->
     green = new PXL.Colour.RGBA(0.1,0.8,0.1,1.0)
     tg = green.clone()
-    tg.r = tg.r / num_residues * (i+1) 
-    tg.g = tg.g / num_residues * (i+1) 
+    tg.r = tg.r / num_residues * (i+1)
+    tg.g = tg.g / num_residues * (i+1)
     tg.b = tg.b / num_residues * (i+1)
     backbone_material = new PXL.Material.BasicColourMaterial(tg)
- 
+
   _parse_cdr : (data) ->
-    # Now parse our CDR 
+    # Now parse our CDR
     data = eval '(' + data + ')'
     @data = data.data
     @_setup_3d()
-  
+
   _error : () ->
     # Damn! Error occured
     alert("Error downloading CDR-H3 File")
-    
+
   _setup_3d : () ->
     # Create the top node and add our camera
-    @top_node = new PXL.Node()  
+    @top_node = new PXL.Node()
     @c = new PXL.Camera.MousePerspCamera new PXL.Math.Vec3(0,0,25)
     @top_node.add @c
-   
+
     num_models = @data.length
     console.log "num models:" + num_models
-    
+
     tidx = 0
 
     # For now just pick the one model
@@ -285,7 +285,7 @@ class Chains
     while @data[tidx]['name'] != "3C6S_2"
       tidx+=1
 
-    for j in [tidx..tidx]    
+    for j in [tidx..tidx]
       model_node = @_create_chain(j)
       @top_node.add model_node
 
@@ -322,7 +322,7 @@ class Chains
 
 chains = new Chains()
 
-params = 
+params =
   canvas : 'webgl-canvas'
   context : chains
   init : chains.init
