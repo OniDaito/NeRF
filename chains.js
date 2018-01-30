@@ -18,6 +18,8 @@
   var Chains, Residue, TestChain, cgl, chains, computed_ca, d0, d1, d2, final_ca, l0, l1, l2, params, real_ca;
 
   // Actual carbon alpha positions of 3C6S_2
+  // from: https://www.rcsb.org/structure/3C6S
+  // starting at the alpha carbon of the amino acid 95 in the D chain (line 7063)
   real_ca = [];
 
   real_ca.push(new PXL.Math.Vec3(31.89, 53.538, -2.462));
@@ -165,6 +167,9 @@
       c = prev_res.c.clone();
       d = this.a;
       na = [this.b, this.c];
+      // values are taken from
+      // https://www.google.com/patents/WO2002073193A1?cl=en
+      // TODO incorporate Pro bond length of CM-NI as 1.355A
       blengths = [1.53, 1.453, 1.325];
       bangles = [PXL.Math.degToRad(115), PXL.Math.degToRad(109), PXL.Math.degToRad(121)];
       torsions = [prev_res.omega, prev_res.psi, this.phi];

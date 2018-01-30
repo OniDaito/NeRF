@@ -15,6 +15,8 @@ A short program to visualize CDR-H3 Loops
 ###
 
 # Actual carbon alpha positions of 3C6S_2
+# from: https://www.rcsb.org/structure/3C6S
+# starting at the alpha carbon of the amino acid 95 in the D chain (line 7063)
 real_ca = []
 real_ca.push(new PXL.Math.Vec3(31.89, 53.538, -2.462))
 real_ca.push(new PXL.Math.Vec3(29.323, 54.052, -0.956))
@@ -154,6 +156,9 @@ class Residue
     c = prev_res.c.clone()
     d = @a
     na = [@b,@c]
+    # values are taken from
+    # https://www.google.com/patents/WO2002073193A1?cl=en
+    # TODO incorporate Pro bond length of CM-NI as 1.355A
     blengths = [1.53, 1.453, 1.325]
     bangles = [PXL.Math.degToRad(115), PXL.Math.degToRad(109), PXL.Math.degToRad(121)]
     torsions = [prev_res.omega, prev_res.psi, @phi]
