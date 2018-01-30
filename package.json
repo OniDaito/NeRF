@@ -1,0 +1,24 @@
+{
+  "name": "nerf",
+  "version": "0.0.1",
+  "description": "",
+  "main": "chains.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "coffee -c chains.coffee",
+    "start": "python3 -m http.server & open http://0.0.0.0:8000/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OniDaito/NeRF.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/OniDaito/NeRF/issues"
+  },
+  "homepage": "https://github.com/OniDaito/NeRF#readme",
+  "dependencies": {
+    "coffeescript": "2.0.0"
+  }
+}
