@@ -5,7 +5,7 @@
   "main": "chains.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "coffee -c chains.coffee",
+    "build": "nodemon -w chains.coffee -x 'coffee -c chains.coffee'",
     "start": "python3 -m http.server & open http://0.0.0.0:8000/"
   },
   "repository": {
@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/OniDaito/NeRF#readme",
   "dependencies": {
-    "coffeescript": "2.0.0"
+    "coffeescript": "2.0.0",
+    "nodemon": "1.14.11"
   }
 }
