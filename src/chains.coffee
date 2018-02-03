@@ -183,25 +183,16 @@ class Residue
     @set_positions()
 
 # Main class for dealing with our 3D chains
-class Chains
+class ChainsApplication
 
-  _bond_rot : (sp, ep) ->
-    dp = PXL.Math.Vec3.sub(ep,sp).normalize()
-    y = new PXL.Math.Vec3(0,1,0)
-    xp = PXL.Math.Vec3.cross(y,dp)
-    dd = Math.acos(dp.dot(y))
-    m = new PXL.Math.Matrix4()
-    m.rotate(xp, dd)
-
-  _create_chain : (modelNameId) ->
+  _create_chain : (model_data) ->
     @residues = []
     @computed_carbon_alpha_positions = []
     bond_geom = new PXL.Geometry.Cylinder(0.13,50,1,3.82)
     atom_geom = new PXL.Geometry.Sphere(0.5,10)
 
     model_node = new PXL.Node()
-    model = @data[modelNameId]
-    num_residues = model.residues.length
+    num_residues = model_data.residues.length
 
     flip = 1.0
     prev_res = null
@@ -209,7 +200,7 @@ class Chains
 
     for i in [0..num_residues-1]
     #for i in [0..2]
-      model_angles = model.angles[i]
+      model_angles = model_data.angles[i]
 
       phi = PXL.Math.degToRad(model_angles.phi)
       psi = PXL.Math.degToRad(model_angles.psi)
@@ -222,7 +213,7 @@ class Chains
 
         # Now work on the bonds
         mp = PXL.Math.Vec3.add(residue.a, prev_res.a).multScalar(0.5)
-        mm = @_bond_rot(residue.a, prev_res.a)
+        mm = calculate_bond_rotation(residue.a, prev_res.a)
         residue.bond_node_a.matrix.translate(mp).mult(mm)
 
       rn = residue.residue_node
@@ -291,25 +282,19 @@ class Chains
     camera = new PXL.Camera.MousePerspCamera new PXL.Math.Vec3(0,0,25)
     @top_node.add camera
 
-    # For now just hard code the model to pick
-    model_node = @_create_chain("3C6S_2")
-    @top_node.add model_node
-
     # Add the test chain
     test_chain_top_node = nodes_for_chain(alpha_carbon_test_positions)
     @top_node.add(test_chain_top_node)
 
+    # For now just hard code the model to pick
+    model_node = @_create_chain(@data["3C6S_2"])
+    @top_node.add model_node
+
     uber = new PXL.GL.UberShader @top_node
     @top_node.add uber
 
-    # Print our test values
-    console.log("Real CA positions")
-    for a in alpha_carbon_test_positions
-      console.log(a)
-
-    console.log("Computed CA Positions")
-    for a in @computed_carbon_alpha_positions
-      console.log(a)
+    log_positions "Test", alpha_carbon_test_positions
+    log_positions "Computed", @computed_carbon_alpha_positions
 
   init : () ->
     fetch("./data/data_angles_small.json")
@@ -326,7 +311,12 @@ class Chains
     if @top_node?
       @top_node.draw()
 
-chains = new Chains()
+log_positions = (label, alpha_carbon_positions) ->
+    console.log(label + " carbon alpha positions")
+    for a in alpha_carbon_positions
+      console.log(a)
+
+chains = new ChainsApplication()
 
 params =
   canvas : 'webgl-canvas'
