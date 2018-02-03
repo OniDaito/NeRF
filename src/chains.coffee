@@ -243,9 +243,13 @@ get_test_alpha_carbons = (calculate_backbond_atoms) ->
   # rotate test values round to be similar to compute values
   calculated_alpha_carbons = calculate_backbond_atoms.filter (atom) -> atom.atom_type == Atom.TYPE.ALPHA_CARBON
   rotation_vector = PXL.Math.Vec3.cross(offset_test_positions[1], calculated_alpha_carbons[1].position)
-
   rotation = (new PXL.Math.Matrix3())
-    .rotate(rotation_vector, PXL.Math.degToRad(110))
+    .rotate(rotation_vector, PXL.Math.degToRad(112))
+  offset_test_positions.forEach((position) -> rotation.multVec(position) )
+
+  # rotate aroun first vector described by two alpha carbons
+  rotation = (new PXL.Math.Matrix3())
+    .rotate(calculated_alpha_carbons[1].position, PXL.Math.degToRad(38))
   offset_test_positions.forEach((position) -> rotation.multVec(position) )
 
   test_alpha_carbons = offset_test_positions.map((alpha_carbon_position) ->
