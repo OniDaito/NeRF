@@ -44,8 +44,6 @@ final_ca.push(PXL.Math.Vec3.add(final_ca[0], d0.multScalar(l0)))
 final_ca.push(PXL.Math.Vec3.add(final_ca[1], d1.multScalar(l1)))
 final_ca.push(PXL.Math.Vec3.add(final_ca[2], d2.multScalar(l2)))
 
-# Place holder for computed
-computed_ca = []
 
 class TestChain
 
@@ -94,6 +92,7 @@ class TestChain
 
 class Residue
   constructor : (phi, psi, omega, bond_geom, atom_geom, bond_mat, atom_mat, show_bond) ->
+    @computed_carbon_alpha_position = undefined
     # Assuming fixed bond lengths and angles with C as the central point
     # Start left handed - initial positions
     @a = new PXL.Math.Vec3(-2.098,1.23,0)
@@ -191,7 +190,7 @@ class Residue
         d = na[i]
       else
         # On the first atom which is a Ca
-        computed_ca.push(d)
+        @computed_carbon_alpha_position = d
 
     @set_positions()
 
@@ -206,13 +205,15 @@ class Chains
     m = new PXL.Math.Matrix4()
     m.rotate(xp, dd)
 
-  _create_chain : (idx) ->
+  _create_chain : (modelNameId) ->
     @residues = []
+    @computed_carbon_alpha_positions = []
     bond_geom = new PXL.Geometry.Cylinder(0.13,50,1,3.82)
     atom_geom = new PXL.Geometry.Sphere(0.5,10)
 
     model_node = new PXL.Node()
-    num_residues = @data[idx]['residues'].length
+    model = @data[modelNameId]
+    num_residues = model.residues.length
 
     flip = 1.0
     prev_res = null
@@ -220,13 +221,11 @@ class Chains
 
     for i in [0..num_residues-1]
     #for i in [0..2]
-      phi = @data[idx]['angles'][i]['phi']
-      psi = @data[idx]['angles'][i]['psi']
-      omega = @data[idx]['angles'][i]['omega']
+      model_angles = model.angles[i]
 
-      phi = PXL.Math.degToRad(phi)
-      psi = PXL.Math.degToRad(psi)
-      omega = PXL.Math.degToRad(omega)
+      phi = PXL.Math.degToRad(model_angles.phi)
+      psi = PXL.Math.degToRad(model_angles.psi)
+      omega = PXL.Math.degToRad(model_angles.omega)
 
       residue = new Residue(phi, psi, omega, bond_geom, atom_geom, @_get_material_bond(i, num_residues), @_get_material_atom(i, num_residues),show_bond)
 
@@ -241,6 +240,7 @@ class Chains
       rn = residue.residue_node
       model_node.add rn
       @residues.push residue
+      @computed_carbon_alpha_positions.push residue.computed_carbon_alpha_position
       flip *= -1.0
 
       show_bond = true
@@ -264,35 +264,48 @@ class Chains
     tg.b = tg.b / num_residues * (i+1)
     backbone_material = new PXL.Material.BasicColourMaterial(tg)
 
-  _parse_cdr : (data) ->
-    # Now parse our CDR
-    data = eval '(' + data + ')'
-    @data = data.data
-    @_setup_3d()
+  _parse_data_angles : (response) =>
+    return new Promise((resolve, reject) =>
+      if (response.ok)
+        response.json()
+        .then((data) =>
+          @data = {}
+          data.data.forEach((model, index) =>
+            model_name_id = model.name
+            if (@data[model_name_id])
+              console.error('Overwriting model ' + model_name_id + ' with another model of the same name at index ' + index)
+            @data[model_name_id] = model
+          )
+          console.log "Fetched " + Object.keys(@data).length + " models"
+          resolve()
+        )
+        .catch((err) =>
+          console.error('Error parsing data angles:', err)
+          reject()
+        )
+      else
+        console.error('Error fetching data angles: ', response.statusText)
+        reject()
+    )
 
   _error : () ->
     # Damn! Error occured
     alert("Error downloading CDR-H3 File")
 
-  _setup_3d : () ->
+  _setup_3d : () =>
+    # Basic GL Functions
+    GL.enable(GL.CULL_FACE)
+    GL.cullFace(GL.BACK)
+    GL.enable(GL.DEPTH_TEST)
+
     # Create the top node and add our camera
     @top_node = new PXL.Node()
-    @c = new PXL.Camera.MousePerspCamera new PXL.Math.Vec3(0,0,25)
-    @top_node.add @c
+    camera = new PXL.Camera.MousePerspCamera new PXL.Math.Vec3(0,0,25)
+    @top_node.add camera
 
-    num_models = @data.length
-    console.log "num models:" + num_models
-
-    tidx = 0
-
-    # For now just pick the one model
-    #while @data[tidx]['name'] != "1NC2_1"
-    while @data[tidx]['name'] != "3C6S_2"
-      tidx+=1
-
-    for j in [tidx..tidx]
-      model_node = @_create_chain(j)
-      @top_node.add model_node
+    # For now just hard code the model to pick
+    model_node = @_create_chain("3C6S_2")
+    @top_node.add model_node
 
     # Add the test chain
     tc = new TestChain(final_ca)
@@ -307,16 +320,16 @@ class Chains
       console.log(a)
 
     console.log("Computed CA Positions")
-    for a in computed_ca
+    for a in @computed_carbon_alpha_positions
       console.log(a)
 
   init : () ->
-    r  = new PXL.Util.Request("data_angles.json")
-    r.get ((data) => @_parse_cdr(data)), @_error
-    # Basic GL Functions
-    GL.enable(GL.CULL_FACE)
-    GL.cullFace(GL.BACK)
-    GL.enable(GL.DEPTH_TEST)
+    fetch("./data_angles_small.json")
+    .then(@_parse_data_angles)
+    .then(@_setup_3d)
+    .catch(() =>
+      console.error('Error initialising')
+    )
 
   draw : () ->
     # Clear and draw our shapes
