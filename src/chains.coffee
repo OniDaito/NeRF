@@ -23,71 +23,59 @@ real_ca.push(new PXL.Math.Vec3(29.323, 54.052, -0.956))
 real_ca.push(new PXL.Math.Vec3(27.71, 57.258, -2.27))
 real_ca.push(new PXL.Math.Vec3(27.985, 57.642, -6.042))
 
-# mod these numbers to match the reference frame
-
-d0 = PXL.Math.Vec3.sub(real_ca[1], real_ca[0])
-d1 = PXL.Math.Vec3.sub(real_ca[2], real_ca[1])
-d2 = PXL.Math.Vec3.sub(real_ca[3], real_ca[2])
-
-l0 = d0.length()
-l1 = d1.length()
-l2 = d2.length()
-
-d0.normalize()
-d1.normalize()
-d2.normalize()
-
 # Starting from zero, here are the real values
-final_ca = []
-final_ca.push(new PXL.Math.Vec3(0, 0, 0))
-final_ca.push(PXL.Math.Vec3.add(final_ca[0], d0.multScalar(l0)))
-final_ca.push(PXL.Math.Vec3.add(final_ca[1], d1.multScalar(l1)))
-final_ca.push(PXL.Math.Vec3.add(final_ca[2], d2.multScalar(l2)))
+alpha_carbon_test_positions = []
+alpha_carbon_test_positions.push(new PXL.Math.Vec3(0, 0, 0))
+alpha_carbon_test_positions.push(PXL.Math.Vec3.sub(real_ca[1], real_ca[0]))
+alpha_carbon_test_positions.push(PXL.Math.Vec3.sub(real_ca[2], real_ca[0]))
+alpha_carbon_test_positions.push(PXL.Math.Vec3.sub(real_ca[3], real_ca[0]))
 
 
-class TestChain
+calculate_bond_rotation = (atom_position, previous_atom_position) ->
+  difference_in_position = PXL.Math.Vec3.sub(previous_atom_position, atom_position)
+  difference_in_position.normalize()
+  y = new PXL.Math.Vec3(0, 1, 0)
+  xp = PXL.Math.Vec3.cross(y, difference_in_position)
+  dd = Math.acos(difference_in_position.dot(y))
+  m = new PXL.Math.Matrix4()
+  m.rotate(xp, dd)
 
-  _bond_rot : (sp, ep) ->
-    dp = PXL.Math.Vec3.sub(ep,sp).normalize()
-    y = new PXL.Math.Vec3(0,1,0)
-    xp = PXL.Math.Vec3.cross(y,dp)
-    dd = Math.acos(dp.dot(y))
-    m = new PXL.Math.Matrix4()
-    m.rotate(xp, dd)
+nodes_for_chain = (atom_positions) ->
+  bond_geom = new PXL.Geometry.Cylinder(0.13, 50, 1, 3.82)
+  atom_geom = new PXL.Geometry.Sphere(0.5, 10)
 
-  constructor : (ca_pos)  ->
-    bond_geom = new PXL.Geometry.Cylinder(0.13,50,1,3.82)
-    atom_geom = new PXL.Geometry.Sphere(0.5,10)
+  pg = new PXL.Colour.RGBA(0.8, 0.8, 0.8, 1.0)
+  bond_mat = new PXL.Material.BasicColourMaterial(pg)
+  atom_mat = new PXL.Material.BasicColourMaterial(pg)
 
-    pg = new PXL.Colour.RGBA(0.8,0.8,0.8,1.0)
-    bond_mat = new PXL.Material.BasicColourMaterial(pg)
-    atom_mat = new PXL.Material.BasicColourMaterial(pg)
+  top_node = new PXL.Node()
 
-    @top_node = new PXL.Node()
+  residue_atoms_node = new PXL.Node()
+  residue_bonds_node = new PXL.Node()
 
-    residue_atoms_node = new PXL.Node()
-    residue_bonds_node = new PXL.Node()
+  residue_atoms_node.add(atom_mat)
+  residue_bonds_node.add(bond_mat)
 
-    residue_atoms_node.add(atom_mat)
-    residue_bonds_node.add(bond_mat)
+  top_node.add residue_atoms_node
+  top_node.add residue_bonds_node
 
-    @top_node.add residue_atoms_node
-    @top_node.add residue_bonds_node
+  for idx in [0...atom_positions.length]
+    atom_position = atom_positions[idx]
+    previous_atom_position = atom_positions[idx - 1]
+    # Add the atom
+    atom_node = new PXL.Node(atom_geom)
+    residue_atoms_node.add(atom_node)
+    atom_node.matrix.translate(atom_position)
 
-    idx = 0
-    for a in ca_pos
-      atom_node = new PXL.Node(atom_geom)
-      residue_atoms_node.add(atom_node)
-      atom_node.matrix.translate(a)
+    if previous_atom_position
+      # Add the bond between this atom and previous atom
+      bond_node = new PXL.Node(bond_geom)
+      residue_bonds_node.add(bond_node)
+      mp = PXL.Math.Vec3.add(atom_position, previous_atom_position).multScalar(0.5)
+      mm = calculate_bond_rotation(atom_position, previous_atom_position)
+      bond_node.matrix.translate(mp).mult(mm)
 
-      if idx != 0
-        bond_node = new PXL.Node(bond_geom)
-        residue_bonds_node.add(bond_node)
-        mp = PXL.Math.Vec3.add(a, ca_pos[idx-1]).multScalar(0.5)
-        mm = @_bond_rot(a, ca_pos[idx-1])
-        bond_node.matrix.translate(mp).mult(mm)
-
-      idx += 1
+  return top_node
 
 
 class Residue
@@ -308,15 +296,15 @@ class Chains
     @top_node.add model_node
 
     # Add the test chain
-    tc = new TestChain(final_ca)
-    @top_node.add(tc.top_node)
+    test_chain_top_node = nodes_for_chain(alpha_carbon_test_positions)
+    @top_node.add(test_chain_top_node)
 
     uber = new PXL.GL.UberShader @top_node
     @top_node.add uber
 
     # Print our test values
     console.log("Real CA positions")
-    for a in final_ca
+    for a in alpha_carbon_test_positions
       console.log(a)
 
     console.log("Computed CA Positions")
@@ -327,8 +315,8 @@ class Chains
     fetch("./data/data_angles_small.json")
     .then(@_parse_data_angles)
     .then(@_setup_3d)
-    .catch(() =>
-      console.error('Error initialising')
+    .catch((err) =>
+      console.error('Error initialising ', err)
     )
 
   draw : () ->
