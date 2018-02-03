@@ -182,68 +182,86 @@ class Residue
 
     @set_positions()
 
+
+get_atom_material = (i, num_residues) ->
+  pink = new PXL.Colour.RGBA(0.8, 0, 0.4, 1.0)
+  pg = pink.clone()
+  pg.r = pg.r / num_residues * (i + 1)
+  pg.g = pg.g / num_residues * (i + 1)
+  pg.b = pg.b / num_residues * (i + 1)
+  calpha_material = new PXL.Material.BasicColourMaterial(pg)
+
+
+get_bond_material = (i, num_residues) ->
+  green = new PXL.Colour.RGBA(0.1, 0.8, 0.1, 1.0)
+  tg = green.clone()
+  tg.r = tg.r / num_residues * (i + 1)
+  tg.g = tg.g / num_residues * (i + 1)
+  tg.b = tg.b / num_residues * (i + 1)
+  backbone_material = new PXL.Material.BasicColourMaterial(tg)
+
+
+create_chain = (model_data) ->
+  residues = []
+  computed_carbon_alpha_positions = []
+  bond_geom = new PXL.Geometry.Cylinder(0.13, 50, 1, 3.82)
+  atom_geom = new PXL.Geometry.Sphere(0.5, 10)
+
+  model_node = new PXL.Node()
+  num_residues = model_data.residues.length
+
+  flip = 1.0
+  prev_res = null
+  show_bond = false
+
+  for i in [0...num_residues]
+  #for i in [0..2]
+    model_angles = model_data.angles[i]
+
+    phi = PXL.Math.degToRad(model_angles.phi)
+    psi = PXL.Math.degToRad(model_angles.psi)
+    omega = PXL.Math.degToRad(model_angles.omega)
+
+    residue = new Residue(phi, psi, omega, bond_geom, atom_geom, get_bond_material(i, num_residues), get_atom_material(i, num_residues), show_bond)
+
+    if i > 0
+      residue.next_pos(prev_res, flip)
+
+      # Now work on the bonds
+      mp = PXL.Math.Vec3.add(residue.a, prev_res.a).multScalar(0.5)
+      mm = calculate_bond_rotation(residue.a, prev_res.a)
+      residue.bond_node_a.matrix.translate(mp).mult(mm)
+
+    rn = residue.residue_node
+    model_node.add rn
+    residues.push residue
+    computed_carbon_alpha_positions.push residue.computed_carbon_alpha_position
+    flip *= -1.0
+
+    show_bond = true
+    prev_res = residue
+
+  { model_node, debug: { computed_carbon_alpha_positions, residues } }
+
 # Main class for dealing with our 3D chains
 class ChainsApplication
 
-  _create_chain : (model_data) ->
-    @residues = []
-    @computed_carbon_alpha_positions = []
-    bond_geom = new PXL.Geometry.Cylinder(0.13,50,1,3.82)
-    atom_geom = new PXL.Geometry.Sphere(0.5,10)
+  init : () ->
+    fetch("./data/data_angles_small.json")
+    .then(@_parse_data)
+    .then(@_setup_3d)
+    .catch((err) =>
+      console.error('Error initialising ', err)
+    )
 
-    model_node = new PXL.Node()
-    num_residues = model_data.residues.length
+  draw : () ->
+    # Clear and draw our shapes
+    GL.clearColor(0.95, 0.95, 0.95, 1.0)
+    GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT)
+    if @top_node
+      @top_node.draw()
 
-    flip = 1.0
-    prev_res = null
-    show_bond = false
-
-    for i in [0..num_residues-1]
-    #for i in [0..2]
-      model_angles = model_data.angles[i]
-
-      phi = PXL.Math.degToRad(model_angles.phi)
-      psi = PXL.Math.degToRad(model_angles.psi)
-      omega = PXL.Math.degToRad(model_angles.omega)
-
-      residue = new Residue(phi, psi, omega, bond_geom, atom_geom, @_get_material_bond(i, num_residues), @_get_material_atom(i, num_residues),show_bond)
-
-      if i > 0
-        residue.next_pos(prev_res, flip)
-
-        # Now work on the bonds
-        mp = PXL.Math.Vec3.add(residue.a, prev_res.a).multScalar(0.5)
-        mm = calculate_bond_rotation(residue.a, prev_res.a)
-        residue.bond_node_a.matrix.translate(mp).mult(mm)
-
-      rn = residue.residue_node
-      model_node.add rn
-      @residues.push residue
-      @computed_carbon_alpha_positions.push residue.computed_carbon_alpha_position
-      flip *= -1.0
-
-      show_bond = true
-      prev_res = residue
-
-    model_node
-
-  _get_material_atom : (i, num_residues) ->
-    pink = new PXL.Colour.RGBA(0.8,0.4,0.4,1.0)
-    pg = pink.clone()
-    pg.r = pg.r / num_residues * (i+1)
-    pg.g = pg.g / num_residues * (i+1)
-    pg.b = pg.b / num_residues * (i+1)
-    calpha_material = new PXL.Material.BasicColourMaterial(pg)
-
-  _get_material_bond : (i, num_residues) ->
-    green = new PXL.Colour.RGBA(0.1,0.8,0.1,1.0)
-    tg = green.clone()
-    tg.r = tg.r / num_residues * (i+1)
-    tg.g = tg.g / num_residues * (i+1)
-    tg.b = tg.b / num_residues * (i+1)
-    backbone_material = new PXL.Material.BasicColourMaterial(tg)
-
-  _parse_data_angles : (response) =>
+  _parse_data : (response) =>
     return new Promise((resolve, reject) =>
       if (response.ok)
         response.json()
@@ -287,29 +305,15 @@ class ChainsApplication
     @top_node.add(test_chain_top_node)
 
     # For now just hard code the model to pick
-    model_node = @_create_chain(@data["3C6S_2"])
-    @top_node.add model_node
+    result = create_chain(@data["3C6S_2"])
+    @top_node.add result.model_node
 
     uber = new PXL.GL.UberShader @top_node
     @top_node.add uber
 
     log_positions "Test", alpha_carbon_test_positions
-    log_positions "Computed", @computed_carbon_alpha_positions
+    log_positions "Computed", result.debug.computed_carbon_alpha_positions
 
-  init : () ->
-    fetch("./data/data_angles_small.json")
-    .then(@_parse_data_angles)
-    .then(@_setup_3d)
-    .catch((err) =>
-      console.error('Error initialising ', err)
-    )
-
-  draw : () ->
-    # Clear and draw our shapes
-    GL.clearColor(0.95, 0.95, 0.95, 1.0)
-    GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT)
-    if @top_node?
-      @top_node.draw()
 
 log_positions = (label, alpha_carbon_positions) ->
     console.log(label + " carbon alpha positions")
@@ -326,5 +330,3 @@ params =
   debug : true
 
 cgl = new PXL.App params
-
-
