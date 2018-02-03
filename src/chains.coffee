@@ -180,7 +180,7 @@ calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
       },
       {
         next_atom_type: Atom.TYPE.ALPHA_CARBON,
-        bond_length: BOND_LENGTHS.NITROGEN_TO_ALPHA_CARBON,
+        bond_length: nitrogen_alpha_carbon_bond_length,
         planar_bond_angle: PLANAR_BOND_ANGLES.VIA_ALPHA_CARBON_FROM_N_TO_CC,
         dihedral_bond_angle: previous_residue.omega
       },
