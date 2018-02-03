@@ -324,7 +324,7 @@ class Chains
       console.log(a)
 
   init : () ->
-    fetch("./data_angles_small.json")
+    fetch("./data/data_angles_small.json")
     .then(@_parse_data_angles)
     .then(@_setup_3d)
     .catch(() =>
