@@ -4,6 +4,9 @@ A short program to visualize CDR-H3 Loops
 
 ###
 
+# FILTER_ATOMS = (backbone_atom) -> backbone_atom.atom_type == Atom.TYPE.ALPHA_CARBON
+FILTER_ATOMS = (backbone_atom) -> !!backbone_atom
+
 
 calculate_bond_rotation = (atom_position, previous_atom_position) ->
   difference_in_position = PXL.Math.Vec3.sub(previous_atom_position, atom_position)
@@ -21,8 +24,13 @@ get_test_atom_material = get_test_bond_material = () ->
 
 
 get_our_atom_material = (atom, total) ->
-  progress = atom.residue.number / (total - 1)
-  alpha_carbon_material_colour = new PXL.Colour.RGBA(0.8 * progress, 0 * progress, 0.4 * progress, 1.0)
+  progress = (atom.residue.number + 1 + total) / (2 * total)
+  if atom.atom_type == Atom.TYPE.ALPHA_CARBON
+    alpha_carbon_material_colour = new PXL.Colour.RGBA(0.8 * progress, 0 * progress, 0.4 * progress, 1.0)
+  else if atom.atom_type == Atom.TYPE.CARBOXYLATE_CARBON
+    alpha_carbon_material_colour = new PXL.Colour.RGBA(0.8 * progress, 0.8 * progress, 0.8 * progress, 1.0)
+  else
+    alpha_carbon_material_colour = new PXL.Colour.RGBA(0 * progress, 0.2 * progress, 0.8 * progress, 1.0)
   new PXL.Material.BasicColourMaterial(alpha_carbon_material_colour)
 
 
@@ -32,8 +40,8 @@ get_our_bond_material = () ->
 
 
 nodes_for_chain = (atoms, get_atom_material, get_bond_material) ->
-  bond_geom = new PXL.Geometry.Cylinder(0.13, 50, 1, 3.82)
   atom_geom = new PXL.Geometry.Sphere(0.5, 10)
+  bond_geom = (length) -> new PXL.Geometry.Cylinder(0.13, 50, 1, length)
 
   top_node = new PXL.Node()
 
@@ -49,120 +57,44 @@ nodes_for_chain = (atoms, get_atom_material, get_bond_material) ->
 
     if previous_atom
       # Add the bond between this atom and previous atom
-      bond_node = new PXL.Node(bond_geom)
+      bond_length = PXL.Math.Vec3.sub(atom_position, previous_atom.position).length()
+      bond_position = PXL.Math.Vec3.add(atom_position, previous_atom.position).multScalar(0.5)
+      bond_node = new PXL.Node(bond_geom(bond_length))
       bond_node.add get_bond_material()
-      mp = PXL.Math.Vec3.add(atom_position, previous_atom.position).multScalar(0.5)
       mm = calculate_bond_rotation(atom_position, previous_atom.position)
-      bond_node.matrix.translate(mp).mult(mm)
+      bond_node.matrix.translate(bond_position).mult(mm)
       top_node.add bond_node
 
   return top_node
 
 
-# class ResidueOld
-#   constructor : (phi, psi, omega) ->
-#     @computed_alpha_carbon_position = undefined
-#     # Assuming fixed bond lengths and angles with C as the central point
-#     # Start left handed - initial positions
-#     @a = new PXL.Math.Vec3(-2.098, 1.23, 0)  # @c_alpha
-#     @b = new PXL.Math.Vec3(-1.33, 0, 0)  # @nitrogen
-#     @c = new PXL.Math.Vec3(0, 0, 0)  # @carbon
-
-#     @phi = phi
-#     @psi = psi
-#     @omega = omega
-
-#     @set_positions()
-
-#   clear_positions : () ->
-#     @atom_node_a.matrix.identity()
-#     @atom_node_b.matrix.identity()
-#     @atom_node_b.matrix.identity()
-
-#   set_positions : () ->
-#     @clear_positions()
-#     @atom_node_a.matrix.translate(@a)
-#     @atom_node_b.matrix.translate(@b)
-#     @atom_node_c.matrix.translate(@c)
-
-#   # Implementation of the NeRF algorithm
-#   # THIS IS THE KEY part of the program
-#   # Essentially, the first 3 atoms/first residue is placed
-#   # we then run next_pos which is placed, based on the previous
-#   next_pos : (prev_res) ->
-#     a = prev_res.a.clone()
-#     b = prev_res.b.clone()
-#     c = prev_res.c.clone()
-#     d = @a
-#     na = [@b,@c]
-#     # values are taken from
-#     # https://www.google.com/patents/WO2002073193A1?cl=en
-#     # TODO incorporate Pro bond length of CM-NI as 1.355A
-#     blengths = [1.53, 1.453, 1.325]
-#     bangles = [PXL.Math.degToRad(115), PXL.Math.degToRad(109), PXL.Math.degToRad(121)]
-#     torsions = [prev_res.omega, prev_res.psi, @phi]
-
-#     for i in [0..2]
-#       ab = PXL.Math.Vec3.sub(b,a)
-#       abn = PXL.Math.Vec3.normalize(ab)
-#       bc = PXL.Math.Vec3.sub(c,b)
-#       bcn = PXL.Math.Vec3.multScalar(bc,1.0/blengths[i])
-#       R = blengths[i]
-
-#       d.x = R * Math.cos(bangles[i])
-#       d.y = R * Math.cos(torsions[i]) * Math.sin(bangles[i])
-#       d.z = R * Math.sin(torsions[i]) * Math.sin(bangles[i])
-
-#       n = PXL.Math.Vec3.cross(ab,bcn).normalize()
-#       nbc = PXL.Math.Vec3.cross(n,bcn)
-
-#       #m = new PXL.Math.Matrix3([bcn.x, nbc.x, n.x, bcn.y, nbc.y, n.y, bcn.z, nbc.z, n.z])
-#       m = new PXL.Math.Matrix3([bcn.x, bcn.y, bcn.z, nbc.x, nbc.y, nbc.z, n.x, n.y, n.z])
-#       d.x = -d.x
-#       m.multVec(d)
-#       d.add(c)
-
-#       # Shift along one
-#       if i != 2
-#         a = b
-#         b = c
-#         c = d
-#         d = na[i]
-#       else
-#         # On the first atom which is a Ca
-#         @computed_alpha_carbon_position = d
-
-#     @set_positions()
-
-
 create_chain = (model_data) ->
-  alpha_carbon_positions = calculate_alpha_carbons(model_data).map (alpha_carbon) -> alpha_carbon.position
-  model_node = nodes_for_chain(alpha_carbon_positions)
-  return { model_node, debug: { alpha_carbon_positions } }
+  backbone_atoms = calculate_backbone_atoms(model_data).filter FILTER_ATOMS
+  model_node = nodes_for_chain(backbone_atoms, get_our_atom_material, get_our_bond_material)
+  return { model_node, debug: { atoms: backbone_atoms } }
 
 
-calculate_alpha_carbons = (model_data) ->
-  backbone_atoms = calculate_backbone_atoms(model_data)
-  backbone_atoms.filter (backbone_atom) -> backbone_atom.atom_type == Atom.TYPE.ALPHA_CARBON
-
-
-Residue = (residue_number, data) -> ({
-  phi: PXL.Math.degToRad(data.angles[residue_number].phi),
-  psi: PXL.Math.degToRad(data.angles[residue_number].psi),
-  omega: PXL.Math.degToRad(data.angles[residue_number].omega),
+Residue = (residue_number, angles, amino_acid) -> ({
+  phi: PXL.Math.degToRad(angles.phi),
+  psi: PXL.Math.degToRad(angles.psi),
+  omega: PXL.Math.degToRad(angles.omega),
   number: residue_number,
-  amino_acid: data.residues[residue_number]
+  amino_acid: amino_acid,
+  backbone_atoms: undefined # maybe mutated later
 })
 
 
 calculate_backbone_atoms = (model_data) ->
-  angles = model_data.angles
+  residues = []
   backbone_atoms = []
 
-  for i in [0...angles.length]
-    previous_backbone_atoms = backbone_atoms[i - 1]
-    residue = Residue(i, model_data)
-    backbone_atoms = backbone_atoms.concat calculate_backbond_atom_positions(residue, previous_backbone_atoms, i)
+  model_data.angles.forEach (angles, residue_number) ->
+    residue = Residue(residue_number, angles, model_data.residues[residue_number])
+    residues.push residue
+    previous_residue = residues[residue_number - 1]
+    backbond_atoms_for_residue = calculate_backbond_atom_positions_for_residue(residue, previous_residue)
+    residue.backbone_atoms = backbond_atoms_for_residue
+    backbone_atoms = backbone_atoms.concat residue.backbone_atoms.sequentially
 
   backbone_atoms
 
@@ -179,13 +111,13 @@ BOND_LENGTHS = {
 # https://www.google.com/patents/WO2002073193A1?cl=en
 # TODO are Proline ALPHA_CARBON_FROM_N_TO_CC or
 # bond angles different?
-BOND_ANGLES = {
-  VIA_ALPHA_CARBON_FROM_N_TO_CC: 109, # +/- 5
-  VIA_CARBOXYLATE_CARBON_FROM_AC_TO_N: 115,
-  VIA_NITROGEN_FROM_CC_TO_AC: 121
+PLANAR_BOND_ANGLES = {
+  VIA_ALPHA_CARBON_FROM_N_TO_CC: PXL.Math.degToRad(109), # +/- 5
+  VIA_CARBOXYLATE_CARBON_FROM_AC_TO_N: PXL.Math.degToRad(115),
+  VIA_NITROGEN_FROM_CC_TO_AC: PXL.Math.degToRad(121)
 }
 
-Atom = (x, y, z, atom_type, residue) -> ({
+Atom = ({x, y, z}, atom_type, residue) -> ({
   position: new PXL.Math.Vec3(x, y, z),
   atom_type,
   residue
@@ -196,93 +128,129 @@ Atom.TYPE = {
   CARBOXYLATE_CARBON: 'CARBOXYLATE_CARBON'
 }
 
-calculate_backbond_atom_positions = (residue, previous_backbone_atom_positions, tempi) ->
-  # if previous_backbone_atom_positions
-  #   # do something
-  # else
-  nitrogen_y_position = if residue.amino_acid == 'PRO' then BOND_LENGTHS.PROLINE_NITROGEN_TO_ALPHA_CARBON else BOND_LENGTHS.NITROGEN_TO_ALPHA_CARBON
-  nitrogen = Atom(0, -nitrogen_y_position, 0, Atom.TYPE.NITROGEN, residue)
-  alpha_carbon = Atom(0, tempi * 2, 0, Atom.TYPE.ALPHA_CARBON, residue)
 
-  angle = (180 - BOND_ANGLES.VIA_ALPHA_CARBON_FROM_N_TO_CC)
-  hypotenuse = BOND_LENGTHS.ALPHA_CARBON_TO_CARBOXYLATE_CARBON
-  carboxylate_carbon_y = Math.sin(angle) * hypotenuse
-  carboxylate_carbon_x = Math.cos(angle) * hypotenuse
-  carboxylate_carbon = Atom(carboxylate_carbon_x, carboxylate_carbon_y, 0, Atom.TYPE.CARBOXYLATE_CARBON, residue)
+calculate_backbond_atom_positions = (last_atoms, residue, {next_atom_type, bond_length, planar_bond_angle, dihedral_bond_angle}) ->
+  last_atom = last_atoms[2]
+  penultimate_atom = last_atoms[1]
+  antepenultimate_atom = last_atoms[0]
 
-  return [
+  a = antepenultimate_atom.position
+  b = penultimate_atom.position
+  c = last_atom.position
+
+  ab = PXL.Math.Vec3.sub(b, a)
+  bcn = PXL.Math.Vec3.sub(c, b).normalize()
+
+  new_atom_position = new PXL.Math.Vec3(
+    bond_length * Math.cos(planar_bond_angle),
+    bond_length * Math.cos(dihedral_bond_angle) * Math.sin(planar_bond_angle),
+    bond_length * Math.sin(dihedral_bond_angle) * Math.sin(planar_bond_angle),
+  )
+
+  n = PXL.Math.Vec3.cross(ab, bcn).normalize()
+  nbc = PXL.Math.Vec3.cross(n, bcn)
+
+  m = new PXL.Math.Matrix3([bcn.x, bcn.y, bcn.z, nbc.x, nbc.y, nbc.z, n.x, n.y, n.z])
+  new_atom_position.x = -new_atom_position.x
+  m.multVec(new_atom_position)
+  new_atom_position.add(c)
+  new_atom = Atom(new_atom_position, next_atom_type, residue)
+
+  last_atoms.push new_atom
+  return last_atoms.slice(1)
+
+
+calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
+  nitrogen_alpha_carbon_bond_length = if residue.amino_acid == 'PRO' then BOND_LENGTHS.PROLINE_NITROGEN_TO_ALPHA_CARBON else BOND_LENGTHS.NITROGEN_TO_ALPHA_CARBON
+
+  if previous_residue
+
+    last_atoms = previous_residue.backbone_atoms.sequentially.slice(0)
+
+    # Implementation of the NeRF algorithm
+    [
+      {
+        next_atom_type: Atom.TYPE.NITROGEN,
+        bond_length: BOND_LENGTHS.CARBOXYLATE_CARBON_TO_NITROGEN,
+        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_CARBOXYLATE_CARBON_FROM_AC_TO_N,
+        dihedral_bond_angle: previous_residue.psi
+      },
+      {
+        next_atom_type: Atom.TYPE.ALPHA_CARBON,
+        bond_length: BOND_LENGTHS.NITROGEN_TO_ALPHA_CARBON,
+        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_ALPHA_CARBON_FROM_N_TO_CC,
+        dihedral_bond_angle: previous_residue.omega
+      },
+      {
+        next_atom_type: Atom.TYPE.CARBOXYLATE_CARBON,
+        bond_length: BOND_LENGTHS.ALPHA_CARBON_TO_CARBOXYLATE_CARBON,
+        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_CARBOXYLATE_CARBON_FROM_AC_TO_N,
+        dihedral_bond_angle: residue.phi
+      }
+    ].forEach((params) ->
+      last_atoms = calculate_backbond_atom_positions(last_atoms, residue, params)
+    )
+
+    nitrogen = last_atoms[0]
+    alpha_carbon = last_atoms[1]
+    carboxylate_carbon = last_atoms[2]
+
+  else
+    nitrogen = Atom({ x: 0, y: -nitrogen_alpha_carbon_bond_length, z: 0 }, Atom.TYPE.NITROGEN, residue)
+    alpha_carbon = Atom({ x: 0, y: 0, z: 0 }, Atom.TYPE.ALPHA_CARBON, residue)
+
+    angle = PXL.Math.degToRad(180) - PLANAR_BOND_ANGLES.VIA_ALPHA_CARBON_FROM_N_TO_CC
+    hypotenuse = BOND_LENGTHS.ALPHA_CARBON_TO_CARBOXYLATE_CARBON
+    carboxylate_carbon_position = {
+      x: Math.sin(angle) * hypotenuse,
+      y: Math.cos(angle) * hypotenuse,
+      z: 0
+    }
+
+    carboxylate_carbon = Atom(carboxylate_carbon_position, Atom.TYPE.CARBOXYLATE_CARBON, residue)
+
+  return {
     nitrogen,
     alpha_carbon,
-    carboxylate_carbon
-  ]
-
-  # Assuming fixed bond lengths and angles with C as the central point
-  # Start left handed - initial positions
-  # c_alpha = new PXL.Math.Vec3(-2.098, 1.23, 0)
-  # nitrogen = new PXL.Math.Vec3(-1.33, 0, 0)
-  # carboxylate_carbon = new PXL.Math.Vec3(0, 0, 0)
-
-  # Implementation of the NeRF algorithm
-  # Essentially, the first 3 atoms/first residue is placed
-  # we then run next_pos which is placed, based on the previous
-  c_alpha = prev_res.a.clone()
-  nitrogen = prev_res.b.clone()
-  carboxylate_carbon = prev_res.c.clone()
-  d = c_alpha
-  na = [nitrogen, carboxylate_carbon]
-
-  bangles = [PXL.Math.degToRad(115), PXL.Math.degToRad(109), PXL.Math.degToRad(121)]
-  torsions = [prev_res.omega, prev_res.psi, phi]
-
-  for i in [0..2]
-    ab = PXL.Math.Vec3.sub(b,a)
-    abn = PXL.Math.Vec3.normalize(ab)
-    bc = PXL.Math.Vec3.sub(c,b)
-    bcn = PXL.Math.Vec3.multScalar(bc,1.0/blengths[i])
-    R = blengths[i]
-
-    d.x = R * Math.cos(bangles[i])
-    d.y = R * Math.cos(torsions[i]) * Math.sin(bangles[i])
-    d.z = R * Math.sin(torsions[i]) * Math.sin(bangles[i])
-
-    n = PXL.Math.Vec3.cross(ab,bcn).normalize()
-    nbc = PXL.Math.Vec3.cross(n,bcn)
-
-    #m = new PXL.Math.Matrix3([bcn.x, nbc.x, n.x, bcn.y, nbc.y, n.y, bcn.z, nbc.z, n.z])
-    m = new PXL.Math.Matrix3([bcn.x, bcn.y, bcn.z, nbc.x, nbc.y, nbc.z, n.x, n.y, n.z])
-    d.x = -d.x
-    m.multVec(d)
-    d.add(c)
-
-    # Shift along one
-    if i != 2
-      a = b
-      b = c
-      c = d
-      d = na[i]
-    else
-      # On the first atom which is a Ca
-      return d
+    carboxylate_carbon,
+    sequentially: [
+      nitrogen,
+      alpha_carbon,
+      carboxylate_carbon
+    ]
+  }
 
 
-# Actual carbon alpha positions of 3C6S_2
-# from: https://www.rcsb.org/structure/3C6S
-# starting at the alpha carbon of the amino acid 95 in the D chain (line 7063)
-alpha_carbon_test_positions = []
-alpha_carbon_test_positions.push(new PXL.Math.Vec3(31.89, 53.538, -2.462))
-alpha_carbon_test_positions.push(new PXL.Math.Vec3(29.323, 54.052, -0.956))
-alpha_carbon_test_positions.push(new PXL.Math.Vec3(27.71, 57.258, -2.27))
-alpha_carbon_test_positions.push(new PXL.Math.Vec3(27.985, 57.642, -6.042))
+get_test_alpha_carbons = (calculate_backbond_atoms) ->
+  # Actual carbon alpha positions of 3C6S_2
+  # from: https://www.rcsb.org/structure/3C6S
+  # starting at the alpha carbon of the amino acid 95 in the D chain (line 7063)
+  alpha_carbon_test_positions = []
+  alpha_carbon_test_positions.push(new PXL.Math.Vec3(31.89, 53.538, -2.462))
+  alpha_carbon_test_positions.push(new PXL.Math.Vec3(29.323, 54.052, -0.956))
+  alpha_carbon_test_positions.push(new PXL.Math.Vec3(27.71, 57.258, -2.27))
+  alpha_carbon_test_positions.push(new PXL.Math.Vec3(27.985, 57.642, -6.042))
 
-# offset the test values
-offset_test_positions = alpha_carbon_test_positions[0].clone()
-offset_test_positions.x -= 4
-test_alpha_carbons = alpha_carbon_test_positions
-  .map((ac) -> PXL.Math.Vec3.sub(ac, offset_test_positions))
-  .map((alpha_carbon_position) ->
-    acp = alpha_carbon_position
-    Atom(acp.x, acp.y, acp.z, Atom.TYPE.ALPHA_CARBON, {})
+  # offset the test values
+  offset_test_position = alpha_carbon_test_positions[0].clone()
+  # offset_test_position.x -= 1
+  offset_test_positions = alpha_carbon_test_positions
+    .map((ac) -> PXL.Math.Vec3.sub(ac, offset_test_position))
+
+  # rotate test values round to be similar to compute values
+  calculated_alpha_carbons = calculate_backbond_atoms.filter (atom) -> atom.atom_type == Atom.TYPE.ALPHA_CARBON
+  rotation_vector = PXL.Math.Vec3.cross(offset_test_positions[1], calculated_alpha_carbons[1].position)
+
+  rotation = (new PXL.Math.Matrix3())
+    .rotate(rotation_vector, PXL.Math.degToRad(110))
+  offset_test_positions.forEach((position) -> rotation.multVec(position) )
+
+  test_alpha_carbons = offset_test_positions.map((alpha_carbon_position) ->
+    Atom(alpha_carbon_position, Atom.TYPE.ALPHA_CARBON, {})
   )
+
+  return test_alpha_carbons
+
 
 # Main class for dealing with our 3D chains
 class ChainsApplication
@@ -341,25 +309,27 @@ class ChainsApplication
     camera = new PXL.Camera.MousePerspCamera new PXL.Math.Vec3(0,0,25)
     @top_node.add camera
 
-    # Add the test chain
-    test_chain_top_node = nodes_for_chain(test_alpha_carbons, get_test_atom_material, get_test_bond_material)
-    @top_node.add(test_chain_top_node)
-
     # For now just hard code the model to pick
-    # result = create_chain(@data["3C6S_2"])
-    # @top_node.add result.model_node
+    result = create_chain(@data["3C6S_2"])
+
+    # Add the test chain
+    test_alpha_carbons = get_test_alpha_carbons(result.debug.atoms)
+    test_chain_top_node = nodes_for_chain(test_alpha_carbons, get_test_atom_material, get_test_bond_material)
+
+    @top_node.add(test_chain_top_node)
+    @top_node.add result.model_node
 
     uber = new PXL.GL.UberShader @top_node
     @top_node.add uber
 
     log_positions "Test", test_alpha_carbons
-    # log_positions "Computed", result.debug.alpha_carbons
+    log_positions "Computed", result.debug.atoms
 
 
-log_positions = (label, alpha_carbons) ->
-    console.log(label + " carbon alpha positions")
-    for a in alpha_carbons
-      console.log(a.residue.amino_acid || '', ' alpha carbon at ', a.position)
+log_positions = (label, atoms) ->
+    console.log(label + " atom positions")
+    for a in atoms
+      console.log(a.residue.amino_acid || '', a.atom_type, 'at', a.position)
 
 chains = new ChainsApplication()
 
