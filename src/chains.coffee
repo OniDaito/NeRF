@@ -83,17 +83,13 @@ class Residue
     @computed_carbon_alpha_position = undefined
     # Assuming fixed bond lengths and angles with C as the central point
     # Start left handed - initial positions
-    @a = new PXL.Math.Vec3(-2.098,1.23,0)
-    @b = new PXL.Math.Vec3(-1.33,0,0)
-    @c = new PXL.Math.Vec3(0,0,0)
+    @a = new PXL.Math.Vec3(-2.098, 1.23, 0)  # @c_alpha
+    @b = new PXL.Math.Vec3(-1.33, 0, 0)  # @nitrogen
+    @c = new PXL.Math.Vec3(0, 0, 0)  # @carbon
 
     @phi = phi
     @psi = psi
     @omega = omega
-
-    @c_alpha  = @a
-    @nitrogen = @b
-    @carbon   = @c
 
     @residue_node = new PXL.Node()
     residue_atoms_node = new PXL.Node()
@@ -120,8 +116,6 @@ class Residue
     @residue_node.add(residue_atoms_node)
     @residue_node.add(residue_bonds_node)
 
-    @res_node = new PXL.Node()
-
   clear_positions : () ->
     @atom_node_a.matrix.identity()
     @atom_node_b.matrix.identity()
@@ -137,7 +131,7 @@ class Residue
   # THIS IS THE KEY part of the program
   # Essentially, the first 3 atoms/first residue is placed
   # we then run next_pos which is placed, based on the previous
-  next_pos : (prev_res, flip) ->
+  next_pos : (prev_res) ->
     a = prev_res.a.clone()
     b = prev_res.b.clone()
     c = prev_res.c.clone()
@@ -210,7 +204,6 @@ create_chain = (model_data) ->
   model_node = new PXL.Node()
   num_residues = model_data.residues.length
 
-  flip = 1.0
   prev_res = null
   show_bond = false
 
@@ -225,7 +218,7 @@ create_chain = (model_data) ->
     residue = new Residue(phi, psi, omega, bond_geom, atom_geom, get_bond_material(i, num_residues), get_atom_material(i, num_residues), show_bond)
 
     if i > 0
-      residue.next_pos(prev_res, flip)
+      residue.next_pos(prev_res)
 
       # Now work on the bonds
       mp = PXL.Math.Vec3.add(residue.a, prev_res.a).multScalar(0.5)
@@ -236,7 +229,6 @@ create_chain = (model_data) ->
     model_node.add rn
     residues.push residue
     computed_carbon_alpha_positions.push residue.computed_carbon_alpha_position
-    flip *= -1.0
 
     show_bond = true
     prev_res = residue
