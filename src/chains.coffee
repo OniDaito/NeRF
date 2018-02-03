@@ -6,6 +6,9 @@ A short program to visualize CDR-H3 Loops
 
 # FILTER_ATOMS = (backbone_atom) -> backbone_atom.atom_type == Atom.TYPE.ALPHA_CARBON
 FILTER_ATOMS = (backbone_atom) -> !!backbone_atom
+DATA_LOCATION = "./data/data_angles.json" # "./data/data_angles_small.json"
+MODEL_NAME_ID = "3C6S_2" # "4JO3_1"
+RENDER_TEST_CHAIN = true
 
 
 calculate_bond_rotation = (atom_position, previous_atom_position) ->
@@ -256,7 +259,7 @@ get_test_alpha_carbons = (calculate_backbond_atoms) ->
 class ChainsApplication
 
   init : () ->
-    fetch("./data/data_angles_small.json")
+    fetch(DATA_LOCATION)
     .then(@_parse_data)
     .then(@_setup_3d)
     .catch((err) =>
@@ -310,13 +313,19 @@ class ChainsApplication
     @top_node.add camera
 
     # For now just hard code the model to pick
-    result = create_chain(@data["3C6S_2"])
+    model_data = @data[MODEL_NAME_ID]
+    if !model_data
+      msg = 'No model data for ' + MODEL_NAME_ID
+      alert(msg)
+      throw new Error(msg)
+    result = create_chain(model_data)
 
     # Add the test chain
     test_alpha_carbons = get_test_alpha_carbons(result.debug.atoms)
     test_chain_top_node = nodes_for_chain(test_alpha_carbons, get_test_atom_material, get_test_bond_material)
 
-    @top_node.add(test_chain_top_node)
+    if RENDER_TEST_CHAIN
+      @top_node.add(test_chain_top_node)
     @top_node.add result.model_node
 
     uber = new PXL.GL.UberShader @top_node
