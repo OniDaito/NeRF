@@ -4,6 +4,10 @@ A short program to visualize CDR-H3 Loops
 
 ###
 
+# TODO - I've noticed that the console.log output for the FIRST Alpha Carbon prints wrong.
+# however that is only if you print the Atom object out. If you select the actual Atom.position
+# it looks ok so long as you don't expand it. It's the weirdest bug I've ever seen!
+
 # FILTER_ATOMS = (backbone_atom) -> backbone_atom.atom_type == Atom.TYPE.ALPHA_CARBON
 FILTER_ATOMS = (backbone_atom) -> !!backbone_atom
 DATA_LOCATION = "./data/data_angles.json" # "./data/data_angles_small.json"
@@ -120,11 +124,12 @@ PLANAR_BOND_ANGLES = {
   VIA_NITROGEN_FROM_CC_TO_AC: PXL.Math.degToRad(121)
 }
 
-Atom = ({x, y, z}, atom_type, residue) -> ({
-  position: new PXL.Math.Vec3(x, y, z),
+Atom = (atom_pos, atom_type, residue) -> ({
+  position: new PXL.Math.Vec3(atom_pos.x, atom_pos.y, atom_pos.z),
   atom_type,
   residue
 })
+
 Atom.TYPE = {
   NITROGEN: 'NITROGEN',
   ALPHA_CARBON: 'ALPHA_CARBON',
@@ -143,7 +148,7 @@ calculate_backbond_atom_positions = (last_atoms, residue, {next_atom_type, bond_
 
   ab = PXL.Math.Vec3.sub(b, a)
   bcn = PXL.Math.Vec3.sub(c, b).normalize()
-
+  
   new_atom_position = new PXL.Math.Vec3(
     bond_length * Math.cos(planar_bond_angle),
     bond_length * Math.cos(dihedral_bond_angle) * Math.sin(planar_bond_angle),
@@ -152,13 +157,12 @@ calculate_backbond_atom_positions = (last_atoms, residue, {next_atom_type, bond_
 
   n = PXL.Math.Vec3.cross(ab, bcn).normalize()
   nbc = PXL.Math.Vec3.cross(n, bcn)
-
   m = new PXL.Math.Matrix3([bcn.x, bcn.y, bcn.z, nbc.x, nbc.y, nbc.z, n.x, n.y, n.z])
+  
   new_atom_position.x = -new_atom_position.x
   m.multVec(new_atom_position)
-  new_atom_position.add(c)
+  new_atom_position.add(c) 
   new_atom = Atom(new_atom_position, next_atom_type, residue)
-
   last_atoms.push new_atom
   return last_atoms.slice(1)
 
@@ -181,13 +185,13 @@ calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
       {
         next_atom_type: Atom.TYPE.ALPHA_CARBON,
         bond_length: nitrogen_alpha_carbon_bond_length,
-        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_ALPHA_CARBON_FROM_N_TO_CC,
+        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_NITROGEN_FROM_CC_TO_AC,
         dihedral_bond_angle: previous_residue.omega
       },
       {
         next_atom_type: Atom.TYPE.CARBOXYLATE_CARBON,
         bond_length: BOND_LENGTHS.ALPHA_CARBON_TO_CARBOXYLATE_CARBON,
-        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_CARBOXYLATE_CARBON_FROM_AC_TO_N,
+        planar_bond_angle: PLANAR_BOND_ANGLES.VIA_ALPHA_CARBON_FROM_N_TO_CC,
         dihedral_bond_angle: residue.phi
       }
     ].forEach((params) ->
@@ -211,6 +215,7 @@ calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
     }
 
     carboxylate_carbon = Atom(carboxylate_carbon_position, Atom.TYPE.CARBOXYLATE_CARBON, residue)
+    console.log("Starting Carboxylate Carbon", carboxylate_carbon_position)
 
   return {
     nitrogen,
