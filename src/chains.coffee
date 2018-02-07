@@ -11,9 +11,8 @@ A short program to visualize CDR-H3 Loops
 # FILTER_ATOMS = (backbone_atom) -> backbone_atom.atom_type == Atom.TYPE.ALPHA_CARBON
 FILTER_ATOMS = (backbone_atom) -> !!backbone_atom
 DATA_LOCATION = "./data/data_angles.json" # "./data/data_angles_small.json"
-MODEL_NAME_ID = "3C6S_2" # "4JO3_1"
-RENDER_TEST_CHAIN = true
-
+MODEL_NAME_ID = "1NC2_1" #"3C6S_2" 
+RENDER_TEST_CHAIN = false
 
 calculate_bond_rotation = (atom_position, previous_atom_position) ->
   difference_in_position = PXL.Math.Vec3.sub(previous_atom_position, atom_position)
@@ -165,7 +164,6 @@ calculate_backbond_atom_positions = (last_atoms, residue, {next_atom_type, bond_
   new_atom = Atom(new_atom_position, next_atom_type, residue)
   last_atoms.push new_atom
   return last_atoms.slice(1)
-
 
 calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
   nitrogen_alpha_carbon_bond_length = if residue.amino_acid == 'PRO' then BOND_LENGTHS.PROLINE_NITROGEN_TO_ALPHA_CARBON else BOND_LENGTHS.NITROGEN_TO_ALPHA_CARBON

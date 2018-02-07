@@ -13,8 +13,6 @@ https://www.google.com/patents/WO2002073193A1?cl=en
 import numpy as np
 import math, itertools
 
-# Details for the particular amino acid list
-torsions = []
 # TODO - PROLINE has different lengths which we should take into account
 # TODO - A_TO_C angle differs by +/- 5 degrees
 bond_lengths = { "N_TO_A" : 1.4615, "PRO_N_TO_A" : 1.353, "A_TO_C" : 1.53, "C_TO_N" : 1.325 }
@@ -43,7 +41,7 @@ def place_atom(atom_a, atom_b, atom_c, bond_angle, torsion_angle, bond_length) :
   d = np.array([R * math.cos(bond_angle),
       R * math.cos(torsion_angle) * math.sin(bond_angle),
       R * math.sin(torsion_angle) * math.sin(bond_angle)])
-
+  
   n = np.cross(ab,bcn)
   n = n / np.linalg.norm(n)
   nbc = np.cross(n,bcn)
@@ -76,7 +74,12 @@ if __name__ == "__main__":
     atoms.append(place_atom(atoms[-3], atoms[-2], atoms[-1], angle, torsion, length))
     (angle, length, key) = next_data(key)
 
+  print("All Atoms")
+  for atom in atoms:
+    print(atom)
+
   # Print the Carbon Alpha positions
+  print("\nCarbon Alphas")
   print(atoms[1])
   print(atoms[4])
   print(atoms[7])
