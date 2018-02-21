@@ -38,6 +38,20 @@ torsions = np.array([0.0, 142.95, 173.209,
   -150.084, 0.0, 0.0
   ])
 
+torsions = np.array([0.0, 142.95, 
+  -147.449, 138.084,
+  -110.138, 138.08,
+  -101.068, -96.169,
+  -78.779, -44.373,
+  -136.836, 164.182,
+  -63.91, 143.817,
+  -144.503, 158.705,
+  -96.842, 103.724,
+  -85.734, -18.138,
+  -150.084, 0.0
+  ])
+
+
 torsions = np.array(list(map(math.radians, torsions)))
 
 # bond_angles and lengths
@@ -49,7 +63,7 @@ lengths = []
 angles.append(angle)
 lengths.append(length)
 
-for torsion in torsions:
+for i in range(0, test_cdr_length * 3):
   (angle, length, key) = next_data(key)
   angles.append(angle)
   lengths.append(length)
@@ -71,13 +85,38 @@ def place_atoms(initial_positions, bond_angles, torsion_angles, bond_lengths, cd
   ''' Place all of our atoms. Based on place_atom but does the entire cdr_length. '''
   positions = initial_positions
   for i in range(0, cdr_length - 1):
+    idy = i * 2 
     for j in range(0, 3):
       idx = i * 3 + j
-      d = place_atom(positions, bond_angles[idx], torsion_angles[idx], bond_lengths[idx])
+      if j == 1:
+        d = place_atom_omega(positions, bond_angles[idx], bond_lengths[idx])
+      else:
+        d = place_atom(positions, bond_angles[idx], torsion_angles[idy], bond_lengths[idx])
+        idy += 1
+
       positions = tf.stack([positions[1], positions[2], d], 0)
 
   # Return the last Carbon Alpha - should be the middle of the final 3
   return positions[1] 
+
+def place_atom_omega(positions, bond_angle, bond_length) :
+  ab = tf.subtract(positions[1], positions[0])
+  bc = tf.subtract(positions[2], positions[1])
+  bcn = normalise(bc)
+  R = bond_length 
+  
+  dx = -R * tf.cos(bond_angle)
+  dy = R * tf.cos(math.radians(180)) * tf.sin(bond_angle)
+  dz = R * tf.sin(math.radians(180)) * tf.sin(bond_angle)
+
+  d = tf.stack([dx,dy,dz], 0) 
+  n = tf.cross(ab,bcn)
+  n = normalise(n)
+  nbc = tf.cross(n,bcn)
+  m = tf.stack([bcn,nbc,n], 0)
+  d = tf.reduce_sum(tf.multiply(tf.expand_dims(d,-1), m), axis=0)
+  d = d + positions[2]
+  return d
 
 def place_atom(positions, bond_angle, torsion_angle, bond_length) :
   ''' Given the three previous atoms, the required angles and the bond
@@ -116,34 +155,38 @@ def angle_range(x):
   #return z
   return x
 
-def to_json(angles) :
+def to_json(results) :
   ''' Given final angles write out the json for us. '''
   import json
-  angles = list(angles)
-  residues = {}
-  residues["data"] = [] 
-  model = {}
-  model["angles"] = []
-  model["name"] = "3NH7_1"
-  model["residues"] = ["GLU", "ARG", "TRP", "HIS", "VAL", "ARG", "GLY", "TYR", "PHE", "ASP", "HIS"]
+  frames = []
 
-  for res in range(0, len(model["residues"])):
-    angle = {}
-    if res != 0:
-      angle["phi"] = angle_range(math.degrees(float(angles[res * 3 - 1])))
-    else:
-      angle["phi"] = 0
-    if res != len(model["residues"]) - 1:
-      angle["omega"] = angle_range(math.degrees(float(angles[res * 3 + 1])))
-      angle["psi"] = angle_range(math.degrees(float(angles[res * 3])))
-    else:
-      angle["omega"] = 0
-      angle["psi"] = 0
+  for result in results:
+    angles = list(result)
+    residues = {}
+    residues["data"] = [] 
+    model = {}
+    model["angles"] = []
+    model["name"] = "3NH7_1"
+    model["residues"] = ["GLU", "ARG", "TRP", "HIS", "VAL", "ARG", "GLY", "TYR", "PHE", "ASP", "HIS"]
+
+    for res in range(0, len(model["residues"])):
+      angle = {}
+      if res != 0:
+        angle["phi"] = angle_range(math.degrees(float(angles[res * 2 - 1])))
+      else:
+        angle["phi"] = 0
+      if res != len(model["residues"]) - 1:
+        angle["omega"] = 180.0 #angle_range(math.degrees(float(angles[res * 3 + 1])))
+        angle["psi"] = angle_range(math.degrees(float(angles[res * 2])))
+      else:
+        angle["omega"] = 0
+        angle["psi"] = 0
+      
+      model["angles"].append(angle)
     
-    model["angles"].append(angle)
-  
-  residues["data"].append(model)
-  
+    residues["data"].append(model)
+    frames.append(residues)
+
   with open("data_angles_test.json", 'w') as f:
     f.write(json.dumps(residues))
 
@@ -165,28 +208,30 @@ if __name__ == "__main__":
     error = basic_error(place_target, place_position, place_angle, x, place_length)
     train_step = tf.train.AdagradOptimizer(0.1).minimize(error)
     #train_step = tf.train.GradientDescentOptimizer(0.1).minimize(error)
-    tf.global_variables_initializer().run()
-    
+    tf.global_variables_initializer().run() 
+    results = []
+
     # Actually perform the gradient descent
-    for stepnum in range(0, 500):
+    for stepnum in range(0, 100):
       sess.run([train_step], feed_dict={place_position: initial_positions, place_angle: angles, place_length: lengths, place_torsion: torsions, place_target: target})
 
       # Print out the actual position and torsion angles for every Carbon Alpha
-      if stepnum % 100 == 0:
+      if stepnum % 1 == 0:
         pa = place_atoms(place_position, place_angle, x, place_length, test_cdr_length)
         cpos = pa.eval(feed_dict={place_position: initial_positions, place_angle: angles, place_length: lengths, place_torsion: torsions, place_target: target})
         result = sess.run(x, feed_dict={place_position: initial_positions, place_angle: angles, place_length: lengths, place_torsion: torsions, place_target: target}) 
         print(cpos) 
-        print(list(map(math.degrees, result)))
-      
+        results.append(result)
+
     # Final angles
     pa = place_atoms(place_position, place_angle, x, place_length, test_cdr_length)
     cpos = pa.eval(feed_dict={place_position: initial_positions, place_angle: angles, place_length: lengths, place_torsion: torsions, place_target: target})
     result = sess.run(x, feed_dict={place_position: initial_positions, place_angle: angles, place_length: lengths, place_torsion: torsions, place_target: target}) 
     print("Final Placing")
     print(cpos)
+    results.append(result)
 
     print("Printing Final Angles")
-    to_json(result)
+    to_json(results)
 
   sess.close()
