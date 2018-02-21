@@ -10,8 +10,9 @@ A short program to visualize CDR-H3 Loops
 
 # FILTER_ATOMS = (backbone_atom) -> backbone_atom.atom_type == Atom.TYPE.ALPHA_CARBON
 FILTER_ATOMS = (backbone_atom) -> !!backbone_atom
-DATA_LOCATION = "./data/data_angles.json" # "./data/data_angles_small.json"
-MODEL_NAME_ID = "1NC2_1" #"3C6S_2" 
+DATA_REAL_LOCATION = "./data/data_angles_small.json"
+DATA_TEST_LOCATION = "./data/data_angles_test.json"
+MODEL_NAME_ID = "3NH7_1"
 RENDER_TEST_CHAIN = false
 
 calculate_bond_rotation = (atom_position, previous_atom_position) ->
@@ -23,11 +24,9 @@ calculate_bond_rotation = (atom_position, previous_atom_position) ->
   m = new PXL.Math.Matrix4()
   m.rotate(xp, dd)
 
-
 get_test_atom_material = get_test_bond_material = () ->
   grey = new PXL.Colour.RGBA(0.8, 0.8, 0.8, 1.0)
   new PXL.Material.BasicColourMaterial(grey)
-
 
 get_our_atom_material = (atom, total) ->
   progress = (atom.residue.number + 1 + total) / (2 * total)
@@ -43,7 +42,6 @@ get_our_atom_material = (atom, total) ->
 get_our_bond_material = () ->
   bond_material_colour = new PXL.Colour.RGBA(0.1, 0.8, 0.1, 1.0)
   new PXL.Material.BasicColourMaterial(bond_material_colour)
-
 
 nodes_for_chain = (atoms, get_atom_material, get_bond_material) ->
   atom_geom = new PXL.Geometry.Sphere(0.5, 10)
@@ -73,10 +71,9 @@ nodes_for_chain = (atoms, get_atom_material, get_bond_material) ->
 
   return top_node
 
-
-create_chain = (model_data) ->
+create_chain = (model_data, atom_material, bond_material ) ->
   backbone_atoms = calculate_backbone_atoms(model_data).filter FILTER_ATOMS
-  model_node = nodes_for_chain(backbone_atoms, get_our_atom_material, get_our_bond_material)
+  model_node = nodes_for_chain(backbone_atoms, atom_material, bond_material)
   return { model_node, debug: { atoms: backbone_atoms } }
 
 
@@ -213,7 +210,6 @@ calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
     }
 
     carboxylate_carbon = Atom(carboxylate_carbon_position, Atom.TYPE.CARBOXYLATE_CARBON, residue)
-    console.log("Starting Carboxylate Carbon", carboxylate_carbon_position)
 
   return {
     nitrogen,
@@ -261,52 +257,65 @@ get_test_alpha_carbons = (calculate_backbond_atoms) ->
 
   return test_alpha_carbons
 
+_error = () ->
+  # Damn! Error occured
+  alert("Error downloading CDR-H3 File")
+
+_parse_data = (response, data_target) ->
+  return new Promise((resolve, reject) ->
+    if (response.ok)
+      response.json()
+      .then((data) =>
+        #data_target = {}
+        data.data.forEach((model, index) ->
+          model_name_id = model.name
+          if (data_target[model_name_id])
+            console.error('Overwriting model ' + model_name_id + ' with another model of the same name at index ' + index)
+          data_target[model_name_id] = model
+        )
+        console.log "Fetched " + Object.keys(data_target).length + " models"
+        console.log "data_target", data_target
+        resolve()
+      )
+      .catch((err) ->
+        console.error('Error parsing data angles:', err)
+        reject()
+      )
+    else
+      console.error('Error fetching data angles: ', response.statusText)
+      reject()
+  )
+
 
 # Main class for dealing with our 3D chains
 class ChainsApplication
 
   init : () ->
-    fetch(DATA_LOCATION)
-    .then(@_parse_data)
-    .then(@_setup_3d)
+    # Closures for the two different files and resulting 3D models
+    @real_model =
+      "role" : "real"
+    @test_model =
+      "role" : "test"
+
+    _parse_data_real = (response) =>
+      _parse_data(response, @real_model)
+
+    _parse_data_test = (response) =>
+      _parse_data(response, @test_model)
+
+    fetch(DATA_REAL_LOCATION)
+    .then(_parse_data_real)
+    .then(fetch(DATA_TEST_LOCATION).then(_parse_data_test).then(@_setup_3d))
     .catch((err) =>
       console.error('Error initialising ', err)
     )
-
+   
   draw : () ->
     # Clear and draw our shapes
     GL.clearColor(0.95, 0.95, 0.95, 1.0)
     GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT)
     if @top_node
       @top_node.draw()
-
-  _parse_data : (response) =>
-    return new Promise((resolve, reject) =>
-      if (response.ok)
-        response.json()
-        .then((data) =>
-          @data = {}
-          data.data.forEach((model, index) =>
-            model_name_id = model.name
-            if (@data[model_name_id])
-              console.error('Overwriting model ' + model_name_id + ' with another model of the same name at index ' + index)
-            @data[model_name_id] = model
-          )
-          console.log "Fetched " + Object.keys(@data).length + " models"
-          resolve()
-        )
-        .catch((err) =>
-          console.error('Error parsing data angles:', err)
-          reject()
-        )
-      else
-        console.error('Error fetching data angles: ', response.statusText)
-        reject()
-    )
-
-  _error : () ->
-    # Damn! Error occured
-    alert("Error downloading CDR-H3 File")
 
   _setup_3d : () =>
     # Basic GL Functions
@@ -320,27 +329,30 @@ class ChainsApplication
     @top_node.add camera
 
     # For now just hard code the model to pick
-    model_data = @data[MODEL_NAME_ID]
+    model_data = @real_model[MODEL_NAME_ID]
     if !model_data
       msg = 'No model data for ' + MODEL_NAME_ID
       alert(msg)
       throw new Error(msg)
-    result = create_chain(model_data)
+    result = create_chain(model_data, get_test_atom_material, get_test_bond_material)
 
-    # Add the test chain
-    test_alpha_carbons = get_test_alpha_carbons(result.debug.atoms)
-    test_chain_top_node = nodes_for_chain(test_alpha_carbons, get_test_atom_material, get_test_bond_material)
-
-    if RENDER_TEST_CHAIN
-      @top_node.add(test_chain_top_node)
     @top_node.add result.model_node
 
     uber = new PXL.GL.UberShader @top_node
     @top_node.add uber
 
-    log_positions "Test", test_alpha_carbons
-    log_positions "Computed", result.debug.atoms
+    log_positions "Real", result.debug.atoms
+  
+    # Now draw the test_model
+    model_data = @test_model[MODEL_NAME_ID]
+    if !model_data
+      msg = 'No model data for ' + MODEL_NAME_ID
+      alert(msg)
+      throw new Error(msg)
+    result = create_chain(model_data, get_our_atom_material, get_our_bond_material)
+    @top_node.add result.model_node
 
+    log_positions "Computed", result.debug.atoms
 
 log_positions = (label, atoms) ->
     console.log(label + " atom positions")

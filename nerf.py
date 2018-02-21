@@ -57,6 +57,13 @@ def place_atom(atom_a, atom_b, atom_c, bond_angle, torsion_angle, bond_length) :
   d = d + atom_c
   return d
 
+def compute_positions(torsions):
+  nitrogen = np.array([0, -1.355, 0])
+  alpha_carbon = np.array([0, 0, 0])
+  carbon = np.array([1.4466, 0.4981, 0])
+  atoms = [nitrogen, alpha_carbon, carbon]
+  torsions = map(math.radians, torsions)
+
 if __name__ == "__main__":
   # Initial test with the first 3 atoms from 3C6S_2 
   nitrogen = np.array([0, -1.355, 0])
