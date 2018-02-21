@@ -13,7 +13,6 @@ FILTER_ATOMS = (backbone_atom) -> !!backbone_atom
 DATA_REAL_LOCATION = "./data/data_angles_small.json"
 DATA_TEST_LOCATION = "./data/data_angles_test.json"
 MODEL_NAME_ID = "3NH7_1"
-RENDER_TEST_CHAIN = false
 
 calculate_bond_rotation = (atom_position, previous_atom_position) ->
   difference_in_position = PXL.Math.Vec3.sub(previous_atom_position, atom_position)
@@ -74,7 +73,19 @@ nodes_for_chain = (atoms, get_atom_material, get_bond_material) ->
 create_chain = (model_data, atom_material, bond_material ) ->
   backbone_atoms = calculate_backbone_atoms(model_data).filter FILTER_ATOMS
   model_node = nodes_for_chain(backbone_atoms, atom_material, bond_material)
-  return { model_node, debug: { atoms: backbone_atoms } }
+  interps = []
+  if model_data["frames"]
+    model_data["frames"].forEach( (frame, index) ->    
+      fi = []
+      next_backbone_atoms = calculate_backbone_atoms(frame).filter FILTER_ATOMS  
+      next_backbone_atoms.forEach( (atom, index) ->
+        fi.push(new PXL.Animation.Interpolation(backbone_atoms[index].position, atom.position))
+      )
+      interps.push(fi)
+      backbone_atoms = next_backbone_atoms
+    )
+
+  return { model_node, animation: interps, debug: { atoms: backbone_atoms } }
 
 
 Residue = (residue_number, angles, amino_acid) -> ({
@@ -222,41 +233,6 @@ calculate_backbond_atom_positions_for_residue = (residue, previous_residue) ->
     ]
   }
 
-
-get_test_alpha_carbons = (calculate_backbond_atoms) ->
-  # Actual carbon alpha positions of 3C6S_2
-  # from: https://www.rcsb.org/structure/3C6S
-  # starting at the alpha carbon of the amino acid 95 in the D chain (line 7063)
-  alpha_carbon_test_positions = []
-  alpha_carbon_test_positions.push(new PXL.Math.Vec3(31.89, 53.538, -2.462))
-  alpha_carbon_test_positions.push(new PXL.Math.Vec3(29.323, 54.052, -0.956))
-  alpha_carbon_test_positions.push(new PXL.Math.Vec3(27.71, 57.258, -2.27))
-  alpha_carbon_test_positions.push(new PXL.Math.Vec3(27.985, 57.642, -6.042))
-
-  # offset the test values
-  offset_test_position = alpha_carbon_test_positions[0].clone()
-  # offset_test_position.x -= 1
-  offset_test_positions = alpha_carbon_test_positions
-    .map((ac) -> PXL.Math.Vec3.sub(ac, offset_test_position))
-
-  # rotate test values round to be similar to compute values
-  calculated_alpha_carbons = calculate_backbond_atoms.filter (atom) -> atom.atom_type == Atom.TYPE.ALPHA_CARBON
-  rotation_vector = PXL.Math.Vec3.cross(offset_test_positions[1], calculated_alpha_carbons[1].position)
-  rotation = (new PXL.Math.Matrix3())
-    .rotate(rotation_vector, PXL.Math.degToRad(112))
-  offset_test_positions.forEach((position) -> rotation.multVec(position) )
-
-  # rotate aroun first vector described by two alpha carbons
-  rotation = (new PXL.Math.Matrix3())
-    .rotate(calculated_alpha_carbons[1].position, PXL.Math.degToRad(38))
-  offset_test_positions.forEach((position) -> rotation.multVec(position) )
-
-  test_alpha_carbons = offset_test_positions.map((alpha_carbon_position) ->
-    Atom(alpha_carbon_position, Atom.TYPE.ALPHA_CARBON, {})
-  )
-
-  return test_alpha_carbons
-
 _error = () ->
   # Damn! Error occured
   alert("Error downloading CDR-H3 File")
@@ -266,7 +242,6 @@ _parse_data = (response, data_target) ->
     if (response.ok)
       response.json()
       .then((data) =>
-        #data_target = {}
         data.data.forEach((model, index) ->
           model_name_id = model.name
           if (data_target[model_name_id])
@@ -277,6 +252,39 @@ _parse_data = (response, data_target) ->
         console.log "data_target", data_target
         resolve()
       )
+      .catch((err) ->
+        console.error('Error parsing data angles:', err)
+        reject()
+      )
+    else
+      console.error('Error fetching data angles: ', response.statusText)
+      reject()
+  )
+
+# Same as the above but we have animation frames
+_parse_data_with_frames = (response, data_target) ->
+  return new Promise((resolve, reject) ->
+    if (response.ok)
+      response.json()
+      .then((data) =>
+        # First frame sets the stage
+          model_name_id = data.name
+          if (data_target[model_name_id])
+            console.error('Overwriting model ' + model_name_id + ' with another model of the same name at index ' + index)
+          data_target[model_name_id] = data.frames[0].data[0]
+          data_target[model_name_id]["residues"] = data.residues
+          data_target[model_name_id]["frames"] = []
+          
+          # Now process the frames
+          data.frames.forEach( (frame, index) ->
+            data_target[model_name_id]["frames"].push(frame.data[0])
+            data_target[model_name_id]["frames"][index]["residues"] = data.residues
+          )
+          console.log "Fetched " + Object.keys(data_target).length + " models"
+          console.log "data_target", data_target
+          resolve()
+        )
+           
       .catch((err) ->
         console.error('Error parsing data angles:', err)
         reject()
@@ -301,7 +309,7 @@ class ChainsApplication
       _parse_data(response, @real_model)
 
     _parse_data_test = (response) =>
-      _parse_data(response, @test_model)
+      _parse_data_with_frames(response, @test_model)
 
     fetch(DATA_REAL_LOCATION)
     .then(_parse_data_real)
@@ -309,8 +317,47 @@ class ChainsApplication
     .catch((err) =>
       console.error('Error initialising ', err)
     )
-   
+
+  animate : () ->
+    # Assume for now, our test has interps
+    if !@interps
+      return
+
+    # Set the frame and the interframe bit
+    if @progress > @interps.length
+      @progress = 0
+  
+    frame = Math.floor(@progress)
+    pp = @progress - frame
+
+    # Shorten for now
+    if frame > 15
+      frame = 0
+      pp = 0 
+      @progress = 0
+    
+    @interps[frame].forEach((interp, index) =>
+      # Move the atoms
+      idx = index * 2 + 1
+      pidx = idx - 2
+      if idx < @test_node.children.length
+        @test_node.children[idx].matrix.translatePart(interp.set(pp))
+        # Now layout the bonds
+        if pidx >= 0  
+          atom_position = @test_node.children[idx].matrix.getPos()
+          previous_atom_position = @test_node.children[pidx].matrix.getPos()
+          bond_position = PXL.Math.Vec3.add(atom_position, previous_atom_position).multScalar(0.5)
+          mm = calculate_bond_rotation(atom_position, previous_atom_position)
+          bond_node = @test_node.children[index*2]
+          bond_node.matrix.identity()
+          bond_node.matrix.translate(bond_position).mult(mm)
+
+    ) 
+  
+    @progress += 0.01 
+
   draw : () ->
+    @animate()
     # Clear and draw our shapes
     GL.clearColor(0.95, 0.95, 0.95, 1.0)
     GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT)
@@ -323,6 +370,8 @@ class ChainsApplication
     GL.cullFace(GL.BACK)
     GL.enable(GL.DEPTH_TEST)
 
+    @progress = 0
+
     # Create the top node and add our camera
     @top_node = new PXL.Node()
     camera = new PXL.Camera.MousePerspCamera new PXL.Math.Vec3(0,0,25)
@@ -330,27 +379,29 @@ class ChainsApplication
 
     # For now just hard code the model to pick
     model_data = @real_model[MODEL_NAME_ID]
-    if !model_data
-      msg = 'No model data for ' + MODEL_NAME_ID
-      alert(msg)
-      throw new Error(msg)
+    #if !model_data
+    #  msg = 'No Real model data for ' + MODEL_NAME_ID
+    #  alert(msg)
+    #  throw new Error(msg)
     result = create_chain(model_data, get_test_atom_material, get_test_bond_material)
-
     @top_node.add result.model_node
-
     uber = new PXL.GL.UberShader @top_node
     @top_node.add uber
-
     log_positions "Real", result.debug.atoms
   
     # Now draw the test_model
     model_data = @test_model[MODEL_NAME_ID]
-    if !model_data
-      msg = 'No model data for ' + MODEL_NAME_ID
-      alert(msg)
-      throw new Error(msg)
+    #if !model_data
+    #  msg = 'No test model data for ' + MODEL_NAME_ID
+    #  alert(msg)
+    #  throw new Error(msg)
     result = create_chain(model_data, get_our_atom_material, get_our_bond_material)
     @top_node.add result.model_node
+    @test_node = result.model_node
+    @test_node.children.pop() # remove last bond
+    @interps = result.animation
+    
+
 
     log_positions "Computed", result.debug.atoms
 

@@ -99,26 +99,7 @@ def place_atoms(initial_positions, bond_angles, torsion_angles, bond_lengths, cd
   # Return the last Carbon Alpha - should be the middle of the final 3
   return positions[1] 
 
-def place_atom_omega(positions, bond_angle, bond_length) :
-  ab = tf.subtract(positions[1], positions[0])
-  bc = tf.subtract(positions[2], positions[1])
-  bcn = normalise(bc)
-  R = bond_length 
-  
-  dx = -R * tf.cos(bond_angle)
-  dy = R * tf.cos(math.radians(180)) * tf.sin(bond_angle)
-  dz = R * tf.sin(math.radians(180)) * tf.sin(bond_angle)
-
-  d = tf.stack([dx,dy,dz], 0) 
-  n = tf.cross(ab,bcn)
-  n = normalise(n)
-  nbc = tf.cross(n,bcn)
-  m = tf.stack([bcn,nbc,n], 0)
-  d = tf.reduce_sum(tf.multiply(tf.expand_dims(d,-1), m), axis=0)
-  d = d + positions[2]
-  return d
-
-def place_atom(positions, bond_angle, torsion_angle, bond_length) :
+def _place_atom (positions, bond_angle, torsion_angle, bond_length):
   ''' Given the three previous atoms, the required angles and the bond
   lengths, place the next atom. Angles are in radians, lengths in angstroms.''' 
   ab = tf.subtract(positions[1], positions[0])
@@ -139,6 +120,13 @@ def place_atom(positions, bond_angle, torsion_angle, bond_length) :
   d = d + positions[2]
   return d
 
+# Two variants on the same, but one is for omegas with fixed 180 angles
+def place_atom_omega(positions, bond_angle, bond_length) :
+  return _place_atom (positions, bond_angle, math.radians(180), bond_length)
+
+def place_atom(positions, bond_angle, torsion_angle, bond_length) :
+  return _place_atom (positions, bond_angle, torsion_angle, bond_length)
+
 def basic_error(target, positions, bond_angle, torsion_angle, bond_length):
   """ Our basic error function. Reduce the difference in positions."""
   cdr_length = test_cdr_length
@@ -158,7 +146,11 @@ def angle_range(x):
 def to_json(results) :
   ''' Given final angles write out the json for us. '''
   import json
+  animation = {}
   frames = []
+  animation["frames"] = frames
+  animation["name"] = "3NH7_1"
+  animation["residues"] = ["GLU", "ARG", "TRP", "HIS", "VAL", "ARG", "GLY", "TYR", "PHE", "ASP", "HIS"]
 
   for result in results:
     angles = list(result)
@@ -166,16 +158,13 @@ def to_json(results) :
     residues["data"] = [] 
     model = {}
     model["angles"] = []
-    model["name"] = "3NH7_1"
-    model["residues"] = ["GLU", "ARG", "TRP", "HIS", "VAL", "ARG", "GLY", "TYR", "PHE", "ASP", "HIS"]
-
-    for res in range(0, len(model["residues"])):
+    for res in range(0, len(animation["residues"])):
       angle = {}
       if res != 0:
         angle["phi"] = angle_range(math.degrees(float(angles[res * 2 - 1])))
       else:
         angle["phi"] = 0
-      if res != len(model["residues"]) - 1:
+      if res != len(animation["residues"]) - 1:
         angle["omega"] = 180.0 #angle_range(math.degrees(float(angles[res * 3 + 1])))
         angle["psi"] = angle_range(math.degrees(float(angles[res * 2])))
       else:
@@ -188,9 +177,9 @@ def to_json(results) :
     frames.append(residues)
 
   with open("data_angles_test.json", 'w') as f:
-    f.write(json.dumps(residues))
+    f.write(json.dumps(animation))
 
-  print(json.dumps(residues))
+  print(json.dumps(animation))
 
 if __name__ == "__main__":
   # Start the tensorflow section
